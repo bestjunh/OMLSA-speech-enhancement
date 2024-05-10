@@ -3,8 +3,12 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
-clear
-[y_in_orig, fs0] = audioread('example_in.wav');
+clear all;
+close all;
+restoredefaultpath
+
+[y_in_orig, fs0] = audioread('D:\DB\CHiME3_samples\F01_22GC010A_BUS.wav');
+y_in_orig = y_in_orig(:,1);
 fs = 16e3;
 y_in_time = resample(y_in_orig, fs, fs0);
 data_length = size(y_in_time, 1);
@@ -171,3 +175,7 @@ while(loop_i+frame_length<data_length)
     end
 end
 audiowrite('example_out.wav', y_out_time, fs);
+
+%%
+figure;spectrogram(y_in_time(:,1),512,384,512,16000,'yaxis');clim([-150 -50])
+figure;spectrogram(y_out_time(:,1),512,384,512,16000,'yaxis');clim([-150 -50])
