@@ -46,15 +46,17 @@ beta = 2;
 
 eta_min = 0.0158;
 GH0 = eta_min ^ 0.5;
-gama0 = 4.6;
+gama0 = 4.6; % = -log(0.01). Eq. (24)
 gama1 = 3;
-zeta0 = 1.67;
+zeta0 = 1.67; % = Eq. (25)
 Bmin = 1.66;
 l_mod_lswitch = 0;
 Vwin = 15;
 Nwin = 8;
 
 while(loop_i+frame_length<data_length)
+
+    %% DFT input
     if(loop_i == 1)
         frame_in = y_in_time(1:frame_length);
     else
@@ -62,8 +64,10 @@ while(loop_i+frame_length<data_length)
     end
     frame_out = [frame_out(frame_move+1:end); zeros(frame_move,1)];
     Y = fft(frame_in.*win);     
+
+    %% Noise power spectrum
     Ya2 = abs(Y(1:N_eff)) .^ 2;  % spec estimation using single frame info.
-    Sf = conv(win_freq, Ya2);  % frequency smoothing 
+    Sf = conv(win_freq, Ya2);  % frequency smoothing Eq. (14)
     Sf = Sf(f_win_length+1:N_eff+f_win_length);  
     
     if(loop_i==1)   % initialization
@@ -86,7 +90,9 @@ while(loop_i+frame_length<data_length)
     v = gamma .* eta ./ (1+eta);  
     GH1 = eta ./ (1+eta).*exp(0.5*expint(v));
     
-    S = alpha_s * S + (1-alpha_s) * Sf;
+    S = alpha_s * S + (1-alpha_s) * Sf; % Eq. (15)
+    %% The minimum statistics (MS)-based noise estimation
+    % Eq. (16)
     if(loop_i<(frame_length+14*frame_move))
         Smin = S;
         Smin_sw = S;
@@ -94,11 +100,14 @@ while(loop_i+frame_length<data_length)
         Smin = min(Smin, S);
         Smin_sw = min(Smin_sw, S);
     end
-    
-    
+    %% Rough decision about speech presence
+    % First iteration
+    % Eq. (18)
     gama_min = Ya2 / Bmin ./ Smin;
-    zeta = S / Bmin ./ Smin;
-    I_f = double(gama_min<gama0 & zeta<zeta0);
+    zeta = S / Bmin ./ Smin;    
+    I_f = double(gama_min<gama0 & zeta<zeta0); % Eq.(21)
+    
+    % Second iteration
     conv_I = conv(win_freq, I_f);  % amoothing
     conv_I = conv_I(f_win_length+1:N_eff+f_win_length);
         
@@ -118,24 +127,26 @@ while(loop_i+frame_length<data_length)
         Smint = min(Smint, St);
         Smint_sw = min(Smint_sw, St);
     end
-
-    
     
     gamma_mint = Ya2 / Bmin ./ Smint;
     zetat = S / Bmin ./ Smint;
-    qhat = ones(N_eff, 1);  % eq. 29 speech absence probability
-    phat = zeros(N_eff, 1);  % eq. 29 init p(speech active|gama)
 
+    %% Speech Absence probability
+    qhat = ones(N_eff, 1);  % eq. 29 speech absence probability
     idx = find(gamma_mint>1 & gamma_mint<gama1 & zetat<zeta0);  % eq. 29
     qhat(idx) = (gama1-gamma_mint(idx)) / (gama1-1);
     qhat(gamma_mint>=gama1 | zetat>=zeta0) = 0;
+
+    %% Speech presence probabilty
     phat = 1 ./ (1+qhat./(1-qhat).*(1+eta).*exp(-v));  % eq. 7
     phat(gamma_mint>=gama1 | zetat>=zeta0) = 1;
+
+    %% Noise sepctrum estimate
     alpha_dt = alpha_d + (1-alpha_d) * phat; 
     lambda_dav = alpha_dt .* lambda_dav + (1-alpha_dt) .* Ya2;  
     lambda_d = lambda_dav * beta;
     
-    
+    %% Reinitiate noise power spectrum
     if l_mod_lswitch==Vwin  % reinitiate every Vwin frames 
         l_mod_lswitch=0;
         if loop_i == Vwin * frame_move + 1 +frame_overlap;
@@ -152,14 +163,17 @@ while(loop_i+frame_length<data_length)
     end
     l_mod_lswitch = l_mod_lswitch + 1;
     
+    %% Cal gain
     gamma = Ya2 ./ max(lambda_d, 1e-10);  % update instant SNR
     eta = alpha_eta * eta_2term + (1-alpha_eta) * max(gamma-1, 0);  % update smoothed SNR, eq. 32 where eta_2term = GH1 .^ 2 .* gamma 
     eta = max(eta, eta_min);
     v = gamma .* eta ./ (1+eta);  
-    GH1 = eta ./ (1+eta).*exp(0.5*expint(v));
+    GH1 = eta ./ (1+eta).*exp(0.5*expint(v)); % Eq. (33)
      
     G = GH1 .^ phat .* GH0 .^ (1-phat);
     eta_2term = GH1 .^ 2 .* gamma;  % eq. 18
+
+    %% iDFT & gain
     
     X = [zeros(3,1); G(4:N_eff-1) .* Y(4:N_eff-1); 0];
     X(N_eff+1:frame_length) = conj(X(N_eff-1:-1:2));  % extend the anti-symmetric range of the spectum
