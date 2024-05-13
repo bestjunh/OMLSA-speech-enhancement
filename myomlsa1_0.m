@@ -54,6 +54,8 @@ l_mod_lswitch = 0;
 Vwin = 15;
 Nwin = 8;
 
+debugG = [];
+
 while(loop_i+frame_length<data_length)
 
     %% DFT input
@@ -127,11 +129,10 @@ while(loop_i+frame_length<data_length)
         Smint = min(Smint, St);
         Smint_sw = min(Smint_sw, St);
     end
-    
-    gamma_mint = Ya2 / Bmin ./ Smint;
-    zetat = S / Bmin ./ Smint;
 
     %% Speech Absence probability
+    gamma_mint = Ya2 / Bmin ./ Smint;
+    zetat = S / Bmin ./ Smint;
     qhat = ones(N_eff, 1);  % eq. 29 speech absence probability
     idx = find(gamma_mint>1 & gamma_mint<gama1 & zetat<zeta0);  % eq. 29
     qhat(idx) = (gama1-gamma_mint(idx)) / (gama1-1);
@@ -187,9 +188,19 @@ while(loop_i+frame_length<data_length)
         y_out_time(loop_i-frame_overlap:loop_i+frame_move-1-frame_overlap) = frame_out(1:frame_move);
         loop_i = loop_i + frame_move;
     end
+
+    %%
+    debugG = [debugG G];
 end
 audiowrite('example_out.wav', y_out_time, fs);
 
 %%
 figure;spectrogram(y_in_time(:,1),512,384,512,16000,'yaxis');clim([-150 -50])
 figure;spectrogram(y_out_time(:,1),512,384,512,16000,'yaxis');clim([-150 -50])
+
+figure;
+imagesc(debugG)
+colormap jet;axis xy;colorbar;
+clim([0 1]);
+title('G');xlabel('frame index');ylabel('frequency bin');
+drawnow
